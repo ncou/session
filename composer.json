@@ -35,6 +35,6 @@
     },
     "extra": {
         "chiron": {
-            "providers": ["Chiron\\Session\\Provider\\SessionServiceProvider"],
+            "providers": ["Chiron\\Session\\Provider\\SessionServiceProvider"]
     }
 }
