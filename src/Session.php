@@ -1,141 +1,358 @@
 <?php
-/**
- * Simple Session class helpers.
- */
+
+declare(strict_types=1);
 
 namespace Chiron\Session;
 
+use Chiron\Security\Security;
+use Chiron\Session\Handler\FileSessionHandler;
+
+//https://github.com/illuminate/session/blob/ac3f515d966c9d70065bb057db41b310aee772c8/Store.php
+//https://github.com/spiral/session/blob/master/src/SessionSection.php
+
+// TODO : passer la classe en final et virer les attributs/méthodes protected !!!!!
 class Session
 {
-    // @var Chiron\Session\SessionManager
-    private $manager;
+    // request attribute
+    public const ATTRIBUTE = '__Session__';
 
     /**
-     * Constructor.
+     * The session ID.
      *
-     * @param SessionManager $manager The session manager.
+     * @var string
      */
-    public function __construct(SessionManager $manager)
-    {
-        $this->manager = $manager;
-    }
+    private $id;
 
-    public function get($key, $default = null)
-    {
-        $this->resumeSession();
-        /*
-        if (array_key_exists($key, $_SESSION)) {
-            return $_SESSION[$key];
-        }
-        return $default;*/
-        return isset($_SESSION[$key]) ? $_SESSION[$key] : $default;
-    }
+    /**
+     * The session name.
+     *
+     * @var string
+     */
+    private $name;
 
-    public function set($key, $value)
-    {
-        $this->resumeOrStartSession();
-        $_SESSION[$key] = $value;
-    }
+    /**
+     * The session attributes.
+     *
+     * @var array
+     */
+    private $attributes = [];
 
-    // TODO : renommer cette méthode delete() en remove() ou en unset() ?
-    public function remove($key)
-    {
-        if ($this->resumeSession()) {
-            if (isset($_SESSION) && array_key_exists($key, $_SESSION)) {
-                unset($_SESSION[$key]);
-            }
-        }
-    }
+    /**
+     * The session handler implementation.
+     *
+     * @var \SessionHandlerInterface
+     */
+    private $handler;
 
-    /*
-        public function clear()
-        {
-            if ($this->resumeSession()) {
-                $_SESSION = [];
-            }
-        }
-    */
-    public function __set($key, $value)
-    {
-        $this->set($key, $value);
-    }
+    /**
+     * Session store started status.
+     *
+     * @var bool
+     */
+    private $started = false;
 
-    public function __get($key)
+    /**
+     * Create a new session instance.
+     *
+     * @param  string  $name
+     * @param  \SessionHandlerInterface  $handler
+     * @param  string|null  $id
+     *
+     * @return void
+     */
+    //public function __construct($name, FileSessionHandler $handler, $id = null)
+    public function __construct()
     {
-        return $this->get($key);
-    }
+        // TODO : à virer c'est un test !!!!
+        $name = 'SID';
+        $handler = new FileSessionHandler(directory('@runtime/session/'), 120);
+        $id = null;
 
-    public function __isset($key)
-    {
-        return array_key_exists($key, $_SESSION);
-    }
-
-    public function __unset($key)
-    {
-        $this->remove($key);
+        $this->setId($id);
+        $this->name = $name;
+        $this->handler = $handler;
     }
 
     /**
-     * Resumes a previous session, or starts a new one.
-     */
-    private function resumeOrStartSession(): void
-    {
-        if (! $this->resumeSession()) {
-            $this->manager->start();
-        }
-    }
-
-    /**
-     * If the session has already been started, or if a session is available, we try to resumes it.
+     * Start the session, reading the data from a handler.
      *
      * @return bool
      */
-    private function resumeSession(): bool
+    public function start(): bool
     {
-        if ($this->manager->isStarted() || $this->manager->resume()) {
-            return true;
-        }
+        $this->loadSession();
 
-        return false;
+        return $this->started = true;
     }
 
-    //********************************** TODO : code ci dessous à nettoyer !!!!!!!!!!
-    /*
-     * Returns true if the attribute exists.
+    /**
+     * Load the session data from the handler.
      *
-     * @param string $name
-     *
-     * @return bool true if the attribute is defined, false otherwise
+     * @return void
      */
-    /*
-    public function has(string $name): bool
+    protected function loadSession()
     {
-        if (empty($_SESSION)) {
-            return false;
+        $this->attributes = array_merge($this->attributes, $this->readFromHandler());
+    }
+
+    /**
+     * Read the session data from the handler.
+     *
+     * @return array
+     */
+    protected function readFromHandler()
+    {
+        if ($data = $this->handler->read($this->getId())) {
+            $data = @unserialize($this->prepareForUnserialize($data));
+
+            if ($data !== false && ! is_null($data) && is_array($data)) {
+                return $data;
+            }
         }
 
-        return array_key_exists($name, $_SESSION);
-    }*/
+        return [];
+    }
 
-    /*
-     * Sets multiple attributes at once: takes a keyed array and sets each key => value pair.
+    /**
+     * Prepare the raw string data from the session for unserialization.
      *
-     * @param array $values
+     * @param  string $data
+     *
+     * @return string
      */
-    /*
-    public function replace(array $values): void
+    protected function prepareForUnserialize($data)
     {
-        $_SESSION = array_replace_recursive($_SESSION, $values);
-    }*/
+        return $data;
+    }
 
-    /*
-     * Returns the number of attributes.
+    /**
+     * Save the session data to storage.
      *
-     * @return int
+     * @return void
      */
-    /*
-    public function count(): int
+    public function save()
     {
-        return count($_SESSION);
-    }*/
+        $this->handler->write($this->getId(), $this->prepareForStorage(
+            serialize($this->attributes)
+        ));
+
+        $this->started = false;
+    }
+
+    /**
+     * Prepare the serialized session data for storage.
+     *
+     * @param  string $data
+     *
+     * @return string
+     */
+    protected function prepareForStorage($data)
+    {
+        return $data;
+    }
+
+    /**
+     * Get all of the session data.
+     *
+     * @return array
+     */
+    public function all()
+    {
+        return $this->attributes;
+    }
+
+    /**
+     * Checks if a key is present and not null.
+     *
+     * @param  string|array $key
+     *
+     * @return bool
+     */
+    public function has($key)
+    {
+        return array_key_exists($key, $this->attributes);
+    }
+
+    /**
+     * Get an item from the session.
+     *
+     * @param  string $key
+     * @param  mixed  $default
+     *
+     * @return mixed
+     */
+    public function get(string $key, $default = null)
+    {
+        if (! $this->has($key)) {
+            return $default;
+        }
+
+        return $this->attributes[$name];
+    }
+
+    /**
+     * Put a key / value pair or array of key / value pairs in the session.
+     *
+     * @param  string $key
+     * @param  mixed  $value
+     *
+     * @return void
+     */
+    public function set(string $key, $value)
+    {
+        $this->attributes[$key] = $value;
+    }
+
+    /**
+     * Remove an item from the session, returning its value.
+     *
+     * @param  string $key
+     *
+     * @return void
+     */
+    public function remove($key): void
+    {
+        unset($this->attributes[$key]);
+    }
+
+    /**
+     * Remove all of the items from the session.
+     *
+     * @return void
+     */
+    public function clear()
+    {
+        $this->attributes = [];
+    }
+
+    /**
+     * Flush the session data and regenerate the ID.
+     *
+     * @return bool
+     */
+    public function invalidate()
+    {
+        $this->clear();
+
+        return $this->migrate(true);
+    }
+
+    /**
+     * Generate a new session identifier.
+     *
+     * @param  bool $destroy
+     *
+     * @return bool
+     */
+    public function regenerate($destroy = false)
+    {
+        return tap($this->migrate($destroy), function () {
+            $this->regenerateToken();
+        });
+    }
+
+    /**
+     * Generate a new session ID for the session.
+     *
+     * @param  bool $destroy
+     *
+     * @return bool
+     */
+    public function migrate($destroy = false)
+    {
+        if ($destroy) {
+            $this->handler->destroy($this->getId());
+        }
+
+        $this->setId($this->generateSessionId());
+
+        return true;
+    }
+
+    /**
+     * Get the underlying session handler implementation.
+     *
+     * @return \SessionHandlerInterface
+     */
+    public function getHandler()
+    {
+        return $this->handler;
+    }
+
+    /**
+     * Determine if the session has been started.
+     *
+     * @return bool
+     */
+    public function isStarted()
+    {
+        return $this->started;
+    }
+
+    /**
+     * Get the name of the session.
+     *
+     * @return string
+     */
+    public function getName()
+    {
+        return $this->name;
+    }
+
+    /**
+     * Set the name of the session.
+     *
+     * @param  string $name
+     *
+     * @return void
+     */
+    public function setName($name)
+    {
+        $this->name = $name;
+    }
+
+    /**
+     * Get the current session ID.
+     *
+     * @return string
+     */
+    public function getId()
+    {
+        return $this->id;
+    }
+
+    /**
+     * Set the session ID.
+     *
+     * @param  string $id
+     *
+     * @return void
+     */
+    public function setId($id)
+    {
+        $this->id = $this->isValidId($id) ? $id : $this->generateSessionId();
+    }
+
+    /**
+     * Determine if this is a valid session ID.
+     *
+     * @param  string $id
+     *
+     * @return bool
+     */
+    public function isValidId($id)
+    {
+        return is_string($id) && ctype_alnum($id) && strlen($id) === 40;
+    }
+
+    /**
+     * Get a new, random session ID.
+     *
+     * @return string
+     */
+    protected function generateSessionId()
+    {
+        //return Str::random(40);
+        return Security::generateId(40);
+    }
 }

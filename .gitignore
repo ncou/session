@@ -2,4 +2,5 @@
 composer.lock
 .phplint-cache
 .phpcs-cache
+.phpunit.result.cache
 .idea/
