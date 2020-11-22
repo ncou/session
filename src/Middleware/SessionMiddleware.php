@@ -11,6 +11,14 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 
+//https://github.com/nuevephp/laravel-session/blob/master/src/Middleware.php
+//https://github.com/odan/session/blob/master/src/Middleware/SessionMiddleware.php
+
+// EXEMPLE sans les cookies => https://github.com/kevinsimard/laravel-cookieless-session/blob/master/src/Middleware/StartSession.php
+
+//https://github.com/illuminate/session
+
+
 final class SessionMiddleware implements MiddlewareInterface
 {
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
@@ -119,8 +127,7 @@ final class SessionMiddleware implements MiddlewareInterface
         // the odds needed to perform garbage collection on any given request. If we do
         // hit it, we'll call this handler to let it delete all the expired sessions.
         if ($this->configHitsLottery($config)) {
-            // TODO : ligne de code à décommenter une fois qu'on aura corrigé la classe FileSessionHandler
-            //$session->getHandler()->gc($this->getLifetimeSeconds());
+            $session->getHandler()->gc($this->getLifetimeSeconds());
         }
     }
 

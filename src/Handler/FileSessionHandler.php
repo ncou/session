@@ -6,6 +6,12 @@ namespace Chiron\Session\Handler;
 
 use Chiron\Filesystem\Filesystem;
 
+//https://github.com/spiral/session/blob/master/src/Handler/FileHandler.php
+//https://github.com/illuminate/session/blob/master/FileSessionHandler.php
+
+// TODO : utiliser un fileprefix pour éviter un comportement dangereux du garbage collector avec l'effacement des fichiers => https://github.com/Dynom/SessionHandler/blob/master/D/SessionDriver/File.php
+//https://github.com/horde/SessionHandler/blob/master/lib/Horde/SessionHandler/Storage/File.php#L156
+
 // TODO : passer la classe en final et virer les propriétés protected !!!!
 // TODO : faire hériter cette classe de l'interface : SessionHandlerInterface qui existe dans PHP !!!  https://www.php.net/manual/fr/class.sessionhandlerinterface.php
 class FileSessionHandler
@@ -92,7 +98,7 @@ class FileSessionHandler
      */
     public function write($sessionId, $data)
     {
-        $this->filesystem->write($this->directory . '/' . $sessionId, $data, true);
+        $this->filesystem->write($this->getFilename($sessionId), $data, true);
 
         return true;
     }
@@ -102,7 +108,7 @@ class FileSessionHandler
      */
     public function destroy($sessionId)
     {
-        $this->filesystem->delete($this->directory . '/' . $sessionId);
+        $this->filesystem->unlink($this->getFilename($sessionId));
 
         return true;
     }
@@ -112,6 +118,7 @@ class FileSessionHandler
      */
     public function gc($lifetime)
     {
+        /*
         $files = Finder::create()
                     ->in($this->directory)
                     ->files()
@@ -120,6 +127,13 @@ class FileSessionHandler
 
         foreach ($files as $file) {
             $this->filesystem->delete($file->getRealPath());
+        }*/
+
+        // TODO : attention c'est dangereux de faire une suppression de tous les fichiers dans le répertoire, car si l'utilisateur a mal configuré son répertoire ca va être dangereux !!! il faudrait peut être préfixer les fichiers de session avec un préfix du genre "_session_XXXXXX" et on ne supprime que les fichiers qui commencent par ce préfix !!!
+        foreach ($this->filesystem->files($this->directory) as $file) {
+            if ($file->getMTime() < time() - $lifetime) {
+                $this->filesystem->unlink($file->getRealPath());
+            }
         }
     }
 

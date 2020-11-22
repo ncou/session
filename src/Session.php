@@ -10,6 +10,8 @@ use Chiron\Session\Handler\FileSessionHandler;
 //https://github.com/illuminate/session/blob/ac3f515d966c9d70065bb057db41b310aee772c8/Store.php
 //https://github.com/spiral/session/blob/master/src/SessionSection.php
 
+// EXEMPLE POUR UN FICHIER DE CONFIG :      https://github.com/laravel-shift/laravel-5.7/blob/master/config/session.php
+
 // TODO : passer la classe en final et virer les attributs/méthodes protected !!!!!
 class Session
 {
