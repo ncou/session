@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Chiron\Session\Middleware;
 
-use Chiron\Http\Message\Cookie;
+use Chiron\Cookies\Cookie;
 use Chiron\Session\Session;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -17,6 +17,10 @@ use Psr\Http\Server\RequestHandlerInterface;
 // EXEMPLE sans les cookies => https://github.com/kevinsimard/laravel-cookieless-session/blob/master/src/Middleware/StartSession.php
 
 //https://github.com/illuminate/session
+
+// Exemple node.js sur sign/unsign un cookie.
+//https://github.com/balderdashy/sails/blob/53d0473c2876b1925136f777cb51ac9eda5b24aa/lib/hooks/session/index.js#L481
+//https://github.com/expressjs/cookie-parser/blob/master/index.js#L129
 
 
 final class SessionMiddleware implements MiddlewareInterface
@@ -44,9 +48,9 @@ final class SessionMiddleware implements MiddlewareInterface
      *
      * @param ServerRequestInterface $request
      *
-     * @return SessionInterface
+     * @return Session
      */
-    private function startSession(ServerRequestInterface $request)
+    private function startSession(ServerRequestInterface $request): Session
     {
         $session = $this->getSession($request);
 
@@ -58,9 +62,9 @@ final class SessionMiddleware implements MiddlewareInterface
     /**
      * @param ServerRequestInterface $request
      *
-     * @return SessionInterface
+     * @return Session
      */
-    private function getSession(ServerRequestInterface $request)
+    private function getSession(ServerRequestInterface $request): Session
     {
         //$session = $this->manager->driver();
         $session = new Session();
@@ -110,11 +114,11 @@ final class SessionMiddleware implements MiddlewareInterface
     /**
      * Remove the garbage from the session if necessary.
      *
-     * @param  \Illuminate\Session\SessionInterface $session
+     * @param  Session $session
      *
      * @return void
      */
-    private function collectGarbage(Session $session)
+    private function collectGarbage(Session $session): void
     {
         //$config = $this->manager->getSessionConfig();
 
@@ -127,7 +131,7 @@ final class SessionMiddleware implements MiddlewareInterface
         // the odds needed to perform garbage collection on any given request. If we do
         // hit it, we'll call this handler to let it delete all the expired sessions.
         if ($this->configHitsLottery($config)) {
-            $session->getHandler()->gc($this->getLifetimeSeconds());
+            $session->getHandler()->gc($this->getLifetimeSeconds()); // TODO : eventuellement créer une proxyméthode pour qu'on puisse appeller la méthode gc() directement depuis la classe Session.
         }
     }
 
@@ -138,34 +142,33 @@ final class SessionMiddleware implements MiddlewareInterface
      *
      * @return bool
      */
-    private function configHitsLottery(array $config)
+    // TODO : remonter cette fonction dans la classe sessionConfig::class, et la renommer en garbageCollectorHitsLotterie()
+    private function configHitsLottery(array $config): bool
     {
         return mt_rand(1, $config['lottery'][1]) <= $config['lottery'][0];
     }
 
     /**
      * @param ResponseInterface $response
-     * @param \Symfony\Component\HttpFoundation\Session\SessionInterface $session
+     * @param Session $session
      *
      * @return ResponseInterface
      */
     // TODO : code à virer !!!!
-    private function addCookieToResponse(ResponseInterface $response, $session)
+    private function addCookieToResponse(ResponseInterface $response, Session $session)
     {
         $s = $session;
 
-        if ($this->sessionIsPersistent($c = $this->manager->getSessionConfig())) {
-            $secure = array_get($c, 'secure', false);
+        $secure = array_get($c, 'secure', false);
 
-            $setCookie = SetCookie::create($s->getName())
-                ->withValue($s->getId())
-                ->withExpires($this->getCookieLifetime())
-                ->withDomain($c['domain'])
-                ->withPath($c['path'])
-                ->withSecure($secure);
+        $setCookie = SetCookie::create($s->getName())
+            ->withValue($s->getId())
+            ->withExpires($this->getCookieLifetime())
+            ->withDomain($c['domain'])
+            ->withPath($c['path'])
+            ->withSecure($secure);
 
-            $response = FigResponseCookies::set($response, $setCookie);
-        }
+        $response = FigResponseCookies::set($response, $setCookie);
 
         return $response;
     }
@@ -198,7 +201,7 @@ final class SessionMiddleware implements MiddlewareInterface
     /**
      * Get the session lifetime in seconds.
      */
-    private function getLifetimeSeconds()
+    private function getLifetimeSeconds(): int
     {
         //return array_get($this->manager->getSessionConfig(), 'lifetime') * 60;
         return 120 * 60;
@@ -210,27 +213,10 @@ final class SessionMiddleware implements MiddlewareInterface
      * @return int
      */
     // TODO : code à virer !!!!
-    private function getCookieLifetime()
+    private function getCookieLifetime(): int
     {
         $config = $this->manager->getSessionConfig();
 
         return $config['expire_on_close'] ? 0 : Carbon::now()->addMinutes($config['lifetime']);
-    }
-
-    /**
-     * Determine if the configured session driver is persistent.
-     *
-     * @param  array|null $config
-     *
-     * @return bool
-     */
-    private function sessionIsPersistent(?array $config = null)
-    {
-        // Some session drivers are not persistent, such as the test array driver or even
-        // when the developer don't have a session driver configured at all, which the
-        // session cookies will not need to get set on any responses in those cases.
-        $config = $config ?: $this->manager->getSessionConfig();
-
-        return ! in_array($config['driver'], [null, 'array']);
     }
 }

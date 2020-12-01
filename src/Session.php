@@ -8,15 +8,24 @@ use Chiron\Security\Security;
 use Chiron\Session\Handler\FileSessionHandler;
 
 //https://github.com/illuminate/session/blob/ac3f515d966c9d70065bb057db41b310aee772c8/Store.php
+//https://github.com/symfony/http-foundation/blob/5.x/Session/Session.php
 //https://github.com/spiral/session/blob/master/src/SessionSection.php
+
+//https://tideways.com/profiler/blog/php-session-garbage-collection-the-unknown-performance-bottleneck
 
 // EXEMPLE POUR UN FICHIER DE CONFIG :      https://github.com/laravel-shift/laravel-5.7/blob/master/config/session.php
 
 // TODO : passer la classe en final et virer les attributs/méthodes protected !!!!!
+// TODO : créer une classe SessionInterface ????
 class Session
 {
     // request attribute
     public const ATTRIBUTE = '__Session__';
+
+    /**
+     * Length of the session id.
+     */
+    public const SESSION_ID_LENGTH = 40;
 
     /**
      * The session ID.
@@ -92,7 +101,7 @@ class Session
      *
      * @return void
      */
-    protected function loadSession()
+    protected function loadSession(): void
     {
         $this->attributes = array_merge($this->attributes, $this->readFromHandler());
     }
@@ -102,7 +111,7 @@ class Session
      *
      * @return array
      */
-    protected function readFromHandler()
+    protected function readFromHandler(): array
     {
         if ($data = $this->handler->read($this->getId())) {
             $data = @unserialize($this->prepareForUnserialize($data));
@@ -122,7 +131,7 @@ class Session
      *
      * @return string
      */
-    protected function prepareForUnserialize($data)
+    protected function prepareForUnserialize(string $data): string
     {
         return $data;
     }
@@ -132,7 +141,7 @@ class Session
      *
      * @return void
      */
-    public function save()
+    public function save(): void
     {
         $this->handler->write($this->getId(), $this->prepareForStorage(
             serialize($this->attributes)
@@ -148,7 +157,7 @@ class Session
      *
      * @return string
      */
-    protected function prepareForStorage($data)
+    protected function prepareForStorage(string $data): string
     {
         return $data;
     }
@@ -158,7 +167,7 @@ class Session
      *
      * @return array
      */
-    public function all()
+    public function all(): array
     {
         return $this->attributes;
     }
@@ -170,7 +179,7 @@ class Session
      *
      * @return bool
      */
-    public function has($key)
+    public function has($key): bool
     {
         return array_key_exists($key, $this->attributes);
     }
@@ -200,7 +209,7 @@ class Session
      *
      * @return void
      */
-    public function set(string $key, $value)
+    public function set(string $key, $value): void
     {
         $this->attributes[$key] = $value;
     }
@@ -212,7 +221,7 @@ class Session
      *
      * @return void
      */
-    public function remove($key): void
+    public function remove(string $key): void
     {
         unset($this->attributes[$key]);
     }
@@ -222,7 +231,7 @@ class Session
      *
      * @return void
      */
-    public function clear()
+    public function clear(): void
     {
         $this->attributes = [];
     }
@@ -232,7 +241,7 @@ class Session
      *
      * @return bool
      */
-    public function invalidate()
+    public function invalidate(): bool
     {
         $this->clear();
 
@@ -246,7 +255,8 @@ class Session
      *
      * @return bool
      */
-    public function regenerate($destroy = false)
+    // TODO : virer cette fonction qui devait servir pour regenerer le csrf token !!!
+    public function regenerate(bool $destroy = false): bool
     {
         return tap($this->migrate($destroy), function () {
             $this->regenerateToken();
@@ -260,7 +270,8 @@ class Session
      *
      * @return bool
      */
-    public function migrate($destroy = false)
+    // TODO : renommer la méthode en "regenerate($destroy = false)" c'est plus logique car le nom migrate ne veut rien dire !!!!
+    public function migrate(bool $destroy = false): bool
     {
         if ($destroy) {
             $this->handler->destroy($this->getId());
@@ -276,6 +287,7 @@ class Session
      *
      * @return \SessionHandlerInterface
      */
+    // TODO : ajouter le return typehint
     public function getHandler()
     {
         return $this->handler;
@@ -286,7 +298,7 @@ class Session
      *
      * @return bool
      */
-    public function isStarted()
+    public function isStarted(): bool
     {
         return $this->started;
     }
@@ -296,7 +308,7 @@ class Session
      *
      * @return string
      */
-    public function getName()
+    public function getName(): string
     {
         return $this->name;
     }
@@ -308,7 +320,7 @@ class Session
      *
      * @return void
      */
-    public function setName($name)
+    public function setName(string $name): void
     {
         $this->name = $name;
     }
@@ -318,7 +330,7 @@ class Session
      *
      * @return string
      */
-    public function getId()
+    public function getId(): string
     {
         return $this->id;
     }
@@ -326,11 +338,12 @@ class Session
     /**
      * Set the session ID.
      *
-     * @param  string $id
+     * @param  null|string $id
      *
      * @return void
      */
-    public function setId($id)
+    // TODO : c'est quoi l'utilité de lui passer null en paramétre au lieu d'une string ???
+    public function setId(?string $id): void
     {
         $this->id = $this->isValidId($id) ? $id : $this->generateSessionId();
     }
@@ -338,13 +351,15 @@ class Session
     /**
      * Determine if this is a valid session ID.
      *
-     * @param  string $id
+     * @param  null|string $id
      *
      * @return bool
      */
-    public function isValidId($id)
+    // TODO : c'est quoi l'utilité de lui passer null en paramétre au lieu d'une string ??? d'ailleur il faudrait pouvoir lui passer un mixed en paramétre
+    public function isValidId(?string $id): bool
     {
-        return is_string($id) && ctype_alnum($id) && strlen($id) === 40;
+        return is_string($id) && ctype_alnum($id) && strlen($id) === self::SESSION_ID_LENGTH;
+        //return preg_match('/^[-,a-zA-Z0-9]{1,128}$/', $id) !== false;
     }
 
     /**
@@ -352,9 +367,8 @@ class Session
      *
      * @return string
      */
-    protected function generateSessionId()
+    protected function generateSessionId(): string
     {
-        //return Str::random(40);
-        return Security::generateId(40);
+        return Security::generateId(self::SESSION_ID_LENGTH);
     }
 }
