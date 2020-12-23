@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Chiron\Session;
 
-use Chiron\Security\Security;
+use Chiron\Security\Support\Random;
 use Chiron\Session\Handler\FileSessionHandler;
 
 //https://github.com/illuminate/session/blob/ac3f515d966c9d70065bb057db41b310aee772c8/Store.php
@@ -20,12 +20,12 @@ use Chiron\Session\Handler\FileSessionHandler;
 class Session
 {
     // request attribute
-    public const ATTRIBUTE = '__Session__';
+    public const ATTRIBUTE = '__Session__'; // TODO : constantes à déplacer dans la future interface SessionInterface ????
 
     /**
      * Length of the session id.
      */
-    public const SESSION_ID_LENGTH = 40;
+    public const SESSION_ID_LENGTH = 40; // TODO : constantes à déplacer dans la future interface SessionInterface ????
 
     /**
      * The session ID.
@@ -72,12 +72,13 @@ class Session
      * @return void
      */
     //public function __construct($name, FileSessionHandler $handler, $id = null)
-    public function __construct()
+    //public function __construct()
+    public function __construct($name, $id = null)
     {
         // TODO : à virer c'est un test !!!!
-        $name = 'SID';
-        $handler = new FileSessionHandler(directory('@runtime/session/'), 120);
-        $id = null;
+        //$name = 'SID';
+        $handler = new FileSessionHandler(directory('@runtime/session/'), 120); // TODO : attention données 'en dur' qu'il va falloir rendre paramétrable !!!!
+        //$id = null;
 
         $this->setId($id);
         $this->name = $name;
@@ -369,6 +370,6 @@ class Session
      */
     protected function generateSessionId(): string
     {
-        return Security::generateId(self::SESSION_ID_LENGTH);
+        return Random::alphanum(self::SESSION_ID_LENGTH);
     }
 }

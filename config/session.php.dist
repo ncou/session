@@ -1,0 +1,31 @@
+<?php
+
+// TODO : ajouter la lottery + ajouter le nom du handler (FileSessionHandler::class) qui doit être une classe de type SessionHandlerInterface !!!
+
+return [
+    /*
+    |--------------------------------------------------------------------------
+    | Session Cookie Name
+    |--------------------------------------------------------------------------
+    | Default: 'session-id'
+    |
+    | The name of the cookie used to store the session id.
+    |
+    | This can be whatever you want (as long as it’s not empty and different
+    | from the other cookie names in your application).
+    |
+    | Use any US-ASCII characters, except control characters, spaces, or tabs.
+    | It also must not contain a separator character like the following:
+    | ( ) < > @ , ; : \ " / [ ] ? = { }
+    */
+    'cookie_name' => 'session-id',
+    /*
+    |--------------------------------------------------------------------------
+    | Session Cookie Lifetime
+    |--------------------------------------------------------------------------
+    | Default: 1209600 (2 weeks, in seconds)
+    |
+    | The age of Session cookies, in seconds (minimal value: 0).
+    */
+    'cookie_age' => 1209600,
+];

@@ -10,6 +10,14 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Chiron\Session\Config\SessionConfig;
+use Chiron\Cookies\CookieFactory;
+use Chiron\Security\Config\SecurityConfig;
+use Chiron\Security\Signer;
+use Chiron\Security\Support\Random;
+use Chiron\Security\Exception\BadSignatureException;
+
+//https://github.com/flarum/core/blob/master/src/Http/Middleware/CollectGarbage.php#L49
 
 //https://github.com/nuevephp/laravel-session/blob/master/src/Middleware.php
 //https://github.com/odan/session/blob/master/src/Middleware/SessionMiddleware.php
@@ -22,25 +30,44 @@ use Psr\Http\Server\RequestHandlerInterface;
 //https://github.com/balderdashy/sails/blob/53d0473c2876b1925136f777cb51ac9eda5b24aa/lib/hooks/session/index.js#L481
 //https://github.com/expressjs/cookie-parser/blob/master/index.js#L129
 
-
 final class SessionMiddleware implements MiddlewareInterface
 {
+    /** @var SessionConfig */
+    private $sessionConfig;
+
+    /** @var CookieFactory */
+    private $cookieFactory;
+
+    /** @var Signer */
+    private $signer;
+
+    /**
+     * @param SessionConfig $sessionConfig
+     * @param CookieFactory $cookieFactory
+     * @param Signer        $signer
+     */
+    public function __construct(SessionConfig $sessionConfig, CookieFactory $cookieFactory, Signer $signer)
+    {
+        $this->sessionConfig = $sessionConfig;
+        $this->cookieFactory = $cookieFactory;
+        // Use the class name as salt to have a different signatures in different application module.
+        $this->signer = $signer->withSalt(self::class);
+    }
+
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
         $session = $this->startSession($request);
 
-        $request = $request->withAttribute(Session::ATTRIBUTE, $session);
-
-        $response = $handler->handle($request);
+        // TODO : attention si on créé une SessionInterface il faudra déplacer cette constante ::ATTRIBUTE dans la classe d'interface, et ne pas la laisser dans la classe Session !!!!
+        // TODO : il faudrait peut être stocker dans la classe SessionMiddleware la constante ATTRIBUTE, et non pas la sotcker dans la classe Session !!!!
+        $response = $handler->handle($request->withAttribute(Session::ATTRIBUTE, $session));
 
         $this->closeSession($session);
-        //$response = $this->addCookieToResponse($response, $session);
 
-        $cookie = $this->createCookie($session->getName(), $session->getId());
+        // TODO : remplacer ces 2 lignes de code par un $this->addCookieToResponse($response, $session) ????
+        $cookie = $this->prepareCookie($session->getId());
 
-        $response = $response->withAddedHeader('Set-Cookie', $cookie->toHeaderValue());
-
-        return $response;
+        return $response->withAddedHeader('Set-Cookie', (string) $cookie); // TODO : créer une méthode return $this->withSessionCookie($response, $session):ResponseInterface qui se charge d'attacher le cookie à la réponse et à retourner le nouvel objet $response actualisé. (et utiliser le $session->getId() et ->getName() pour alimenter le cookie name et le cookie value.
     }
 
     /**
@@ -66,41 +93,36 @@ final class SessionMiddleware implements MiddlewareInterface
      */
     private function getSession(ServerRequestInterface $request): Session
     {
-        //$session = $this->manager->driver();
-        $session = new Session();
+        $name = $this->sessionConfig->getCookieName();
+        $id = $this->getSessionIdFromCookie($request->getCookieParams());
 
-        //$cookieData = FigRequestCookies::get($request, $session->getName());
-        //$id = $cookieData->getValue();
-
-        $id = $this->fetchSessionId($request);
-
-        $session->setId($id);
-
-        return $session;
+        return new Session($name, $id);
     }
 
     /**
      * Attempt to locate session ID in request.
      *
-     * @param ServerRequestInterface $request
+     * @param array $cookies
      *
      * @return string|null
      */
-    private function fetchSessionId(ServerRequestInterface $request): ?string
+    private function getSessionIdFromCookie(array $cookies): ?string
     {
-        $cookies = $request->getCookieParams();
+        $name = $this->sessionConfig->getCookieName();
+        $value = $cookies[$name] ?? '';
 
-        if (empty($cookies['SID'])) {
+        try {
+            return $this->signer->unsign($value);
+        } catch (BadSignatureException $e){
+            // Don't blow up the middleware if the signature is invalid.
             return null;
         }
-
-        return $cookies['SID'];
     }
 
     /**
      * Close the session handling for the request.
      *
-     * @param  \Illuminate\Session\SessionInterface $session
+     * @param  SessionInterface $session
      *
      * @return void
      */
@@ -118,6 +140,8 @@ final class SessionMiddleware implements MiddlewareInterface
      *
      * @return void
      */
+    // TODO : utiliser un middleware pour collecter la poubelle !!!! => https://github.com/flarum/core/blob/master/src/Http/Middleware/CollectGarbage.php
+    // TODO : renommer la méthode en collectGarbageSometimes()
     private function collectGarbage(Session $session): void
     {
         //$config = $this->manager->getSessionConfig();
@@ -125,13 +149,14 @@ final class SessionMiddleware implements MiddlewareInterface
         // We must manually sweep the storage location to get rid of old sessions from storage.
         // Here are the chances that it will happen on a given request.
         // By default, the odds are 2 out of 100.
-        $config['lottery'] = [2, 100];
+        $config['lottery'] = [2, 100]; // TODO : ajouter le systéme de lottery dans le fichier de config session.php.dist
 
         // Here we will see if this request hits the garbage collection lottery by hitting
         // the odds needed to perform garbage collection on any given request. If we do
         // hit it, we'll call this handler to let it delete all the expired sessions.
         if ($this->configHitsLottery($config)) {
-            $session->getHandler()->gc($this->getLifetimeSeconds()); // TODO : eventuellement créer une proxyméthode pour qu'on puisse appeller la méthode gc() directement depuis la classe Session.
+            $lifetime = $this->sessionConfig->getCookieAge();
+            $session->getHandler()->gc($lifetime); // TODO : eventuellement créer une proxyméthode pour qu'on puisse appeller la méthode gc() directement depuis la classe Session.
         }
     }
 
@@ -142,81 +167,30 @@ final class SessionMiddleware implements MiddlewareInterface
      *
      * @return bool
      */
-    // TODO : remonter cette fonction dans la classe sessionConfig::class, et la renommer en garbageCollectorHitsLotterie()
+    // TODO : remonter cette fonction dans la classe sessionConfig::class, et la renommer en garbageCollectorHitsLottery()
+    // TODO : lui passer en paramétre $probability et $divisor
+    //https://github.com/flarum/core/blob/master/src/Http/Middleware/CollectGarbage.php#L49
+    // TODO : renommer la méthode en hit()
     private function configHitsLottery(array $config): bool
     {
-        return mt_rand(1, $config['lottery'][1]) <= $config['lottery'][0];
+        return mt_rand(1, $config['lottery'][1]) <= $config['lottery'][0]; // TODO : utiliser des variables $probability et $divisor
     }
 
     /**
-     * @param ResponseInterface $response
-     * @param Session $session
+     * Create Session cookie with the signed session ID value.
+     * Sign the value stored in the cookie for better security (in case of XSS attack).
      *
-     * @return ResponseInterface
-     */
-    // TODO : code à virer !!!!
-    private function addCookieToResponse(ResponseInterface $response, Session $session)
-    {
-        $s = $session;
-
-        $secure = array_get($c, 'secure', false);
-
-        $setCookie = SetCookie::create($s->getName())
-            ->withValue($s->getId())
-            ->withExpires($this->getCookieLifetime())
-            ->withDomain($c['domain'])
-            ->withPath($c['path'])
-            ->withSecure($secure);
-
-        $response = FigResponseCookies::set($response, $setCookie);
-
-        return $response;
-    }
-
-    /**
-     * Create cookie with the session ID.
-     *
-     * @param string $cookieName
      * @param string $sessionId
      *
      * @return Cookie
      */
-    private function createCookie(string $cookieName, string $sessionId): Cookie
+    // TODO : renommer en createCookie() !!!!
+    private function prepareCookie(string $sessionId): Cookie
     {
-        $cookie = Cookie::create(
-            $cookieName, // TODO utiliser directement la nom qui est configuré dans le sessionConfig ????
-            $sessionId,
-            [
-                'expires' => time() + 864000, //$this->sessionConfig->getCookieLifetime(),
-                //'path' => null, //'path' => $request->getAttribute('webroot'), // https://github.com/cakephp/cakephp/blob/master/src/Http/Middleware/CsrfProtectionMiddleware.php#L331
-                //'secure'   => true,//$this->sessionConfig->isCookieSecure(),
-                //'samesite' => 'Lax',//$this->sessionConfig->getSameSite(),
-                //'httponly' => true,
-            ]
-        );
+        $name = $this->sessionConfig->getCookieName();
+        $value = $this->signer->sign($sessionId);
+        $expires = time() + $this->sessionConfig->getCookieAge();
 
-        return $cookie;
-    }
-
-    /**
-     * Get the session lifetime in seconds.
-     */
-    private function getLifetimeSeconds(): int
-    {
-        //return array_get($this->manager->getSessionConfig(), 'lifetime') * 60;
-        return 120 * 60;
-    }
-
-    /**
-     * Get the cookie lifetime in seconds.
-     *
-     * @return int
-     */
-    // TODO : code à virer !!!!
-    private function getCookieLifetime(): int
-    {
-        $config = $this->manager->getSessionConfig();
-
-        return $config['expire_on_close'] ? 0 : Carbon::now()->addMinutes($config['lifetime']);
+        return $this->cookieFactory->create($name, $value, $expires);
     }
 }
