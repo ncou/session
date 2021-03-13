@@ -14,7 +14,7 @@ use Chiron\Session\Config\SessionConfig;
 use Chiron\Cookies\CookieFactory;
 use Chiron\Security\Config\SecurityConfig;
 use Chiron\Security\Signer;
-use Chiron\Security\Support\Random;
+use Chiron\Support\Random;
 use Chiron\Security\Exception\BadSignatureException;
 
 //https://github.com/flarum/core/blob/master/src/Http/Middleware/CollectGarbage.php#L49

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Chiron\Session;
 
-use Chiron\Security\Support\Random;
+use Chiron\Support\Random;
 use Chiron\Session\Handler\FileSessionHandler;
 
 //https://github.com/illuminate/session/blob/ac3f515d966c9d70065bb057db41b310aee772c8/Store.php
