@@ -12,7 +12,6 @@ use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
 use Chiron\Session\Config\SessionConfig;
 use Chiron\Cookies\CookieFactory;
-use Chiron\Security\Config\SecurityConfig;
 use Chiron\Security\Signer;
 use Chiron\Support\Random;
 use Chiron\Security\Exception\BadSignatureException;
