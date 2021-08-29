@@ -15,6 +15,7 @@ use Psr\Container\NotFoundExceptionInterface;
 // TODO : renommer la classe en SessionManager ????
 // TODO : créer une facade qu'on appellerai "Session"
 // TODO : créer une classe SessionInterface, et faire un implements cette classe de SessionInterface et donc lui rajouter les méthodes du style : get() / has() / set() ...etc ca servirait de proxy pour manipuler les données de sessions !!!!
+// TODO : utilité de cette classe ????
 final class SessionScope implements SingletonInterface
 {
     /** @var Session */
