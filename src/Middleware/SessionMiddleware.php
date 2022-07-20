@@ -140,7 +140,7 @@ final class SessionMiddleware implements MiddlewareInterface
      * @return void
      */
     // TODO : utiliser un middleware pour collecter la poubelle !!!! => https://github.com/flarum/core/blob/master/src/Http/Middleware/CollectGarbage.php
-    // TODO : renommer la méthode en collectGarbageSometimes()
+    // TODO : renommer la méthode en collectGarbageSometimes() ou eventuallyCollectGarbage ou TryToCollectGarbage
     private function collectGarbage(Session $session): void
     {
         //$config = $this->manager->getSessionConfig();
